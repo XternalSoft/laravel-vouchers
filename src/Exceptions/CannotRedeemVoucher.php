@@ -9,16 +9,16 @@ class CannotRedeemVoucher extends \Exception
     protected $message = 'Instance is disallowed to redeem this voucher or provided item not allowed.';
 
     protected $voucher;
-    protected $item;
+    protected $items;
 
-    public static function create(Model $voucher, Model|null $item = null)
+    public static function create(Model $voucher, Model|array|null $items = null)
     {
-        return new static($voucher, $item);
+        return new static($voucher, $items);
     }
 
-    public function __construct(Model $voucher, Model|null $item = null)
+    public function __construct(Model $voucher, Model|array|null $items = null)
     {
         $this->voucher = $voucher;
-        $this->item = $item;
+        $this->items = $items;
     }
 }

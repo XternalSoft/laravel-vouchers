@@ -4,18 +4,19 @@ namespace MOIREI\Vouchers\Traits;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphToMany;
+use Illuminate\Support\Collection;
 use InvalidArgumentException;
 use MOIREI\Vouchers\Events\VoucherRedeemed;
-use MOIREI\Vouchers\Exceptions\VoucherExpired;
+use MOIREI\Vouchers\Exceptions\CannotRedeemVoucher;
 use MOIREI\Vouchers\Exceptions\VoucherAlreadyRedeemed;
 use MOIREI\Vouchers\Exceptions\VoucherRedeemsExhausted;
-use MOIREI\Vouchers\Exceptions\CannotRedeemVoucher;
 use MOIREI\Vouchers\Facades\Vouchers;
+use MOIREI\Vouchers\Models\ItemVoucherable;
 use MOIREI\Vouchers\Models\Voucher;
 use MOIREI\Vouchers\VoucherScheme;
 
 /**
- * @property \Illuminate\Support\Collection $vouchers
+ * @property Collection $vouchers
  */
 trait CanRedeemVouchers
 {
@@ -23,56 +24,25 @@ trait CanRedeemVouchers
      * Redeem a voucher or voucher code
      *
      * @param string $code
-     * @param \Illuminate\Database\Eloquent\Model|string|null $item
-     * @throws \MOIREI\Vouchers\Exceptions\VoucherExpired
-     * @throws \MOIREI\Vouchers\Exceptions\VoucherIsInvalid
-     * @throws \MOIREI\Vouchers\Exceptions\VoucherRedeemsExhausted
-     * @throws \MOIREI\Vouchers\Exceptions\CannotRedeemVoucher
-     * @throws \MOIREI\Vouchers\Exceptions\VoucherAlreadyRedeemed
-     * @throws InvalidArgumentException
-     * @return \MOIREI\Vouchers\Models\Voucher
+     * @param array|null $items
+     * @return Voucher
+     * @throws CannotRedeemVoucher
+     * @throws VoucherAlreadyRedeemed
+     * @throws VoucherRedeemsExhausted
      */
-    public function redeem(string $code, Model|string|null $item = null): Voucher
+    public function redeem(string $code, array|null $items = null): Voucher
     {
         $voucher = Vouchers::check($code);
 
-        if (!$voucher->active) {
-            throw new \Exception("Cannot redeem inactive voucher");
-        }
-
-        if ($voucher->limit_scheme->is(VoucherScheme::REDEEMER)) {
-            $is_redeemed = $voucher->isRedeemed($this);
-        } else {
-            $is_redeemed = $voucher->isRedeemed($item);
-        }
-
-        if ($is_redeemed && $voucher->isDisposable()) {
-            throw VoucherAlreadyRedeemed::create($voucher);
-        }
-        if ($is_redeemed) {
-            throw VoucherRedeemsExhausted::create($voucher);
-        }
-        if (!$item) {
-            $items = $voucher->items;
-            if ($items->count() > 1) {
-                throw new InvalidArgumentException("Please provide an item.");
-            } else {
-                $item = $items->shift();
-            }
-        }
-        if (!$this->canRedeem($voucher, $item)) {
-            throw CannotRedeemVoucher::create($voucher, $item);
-        }
-        if ($voucher->isExpired()) {
-            throw VoucherExpired::create($voucher);
+        if (!$this->canRedeem($voucher, $items)) {
+            throw CannotRedeemVoucher::create($voucher, $items);
         }
 
         if ($voucher->limit_scheme->is(VoucherScheme::ITEM)) {
-            // $item is required
-            if (!$item) {
-                throw new InvalidArgumentException("Please provide an item.");
+            $items = $this->filterItems($voucher,$items);
+            foreach ($items as $item) {
+                $voucher->incrementModelUse($item);
             }
-            $voucher->incrementModelUse($item);
         } elseif ($voucher->limit_scheme->is(VoucherScheme::REDEEMER)) {
             $voucher->incrementModelUse($this);
         } else {
@@ -92,13 +62,11 @@ trait CanRedeemVouchers
      * Alias for redeem()
      * Redeem a voucher or voucher code
      *
-     * @param string $code
-     * @throws \MOIREI\Vouchers\Exceptions\VoucherExpired
-     * @throws \MOIREI\Vouchers\Exceptions\VoucherIsInvalid
-     * @throws \MOIREI\Vouchers\Exceptions\VoucherRedeemsExhausted
-     * @throws \MOIREI\Vouchers\Exceptions\CannotRedeemVoucher
-     * @throws \MOIREI\Vouchers\Exceptions\VoucherAlreadyRedeemed
-     * @return \MOIREI\Vouchers\Models\Voucher
+     * @param string $voucher
+     * @return Voucher
+     * @throws CannotRedeemVoucher
+     * @throws VoucherAlreadyRedeemed
+     * @throws VoucherRedeemsExhausted
      */
     public function redeemVoucher(string $voucher): Voucher
     {
@@ -109,23 +77,83 @@ trait CanRedeemVouchers
      * Check whether the user instance can redeem a voucher or voucher code.
      *
      * @param Voucher|string $voucher
-     * @param Model|array|string|null $product
+     * @param Model|array|null $items
      * @return bool
+     * @throws VoucherAlreadyRedeemed
+     * @throws VoucherRedeemsExhausted
      */
-    public function canRedeem(Voucher|string $voucher, Model|array|string|null $product = null): bool
+    public function canRedeem(Voucher|string $voucher, Model|array|null $items = null): bool
     {
         if (is_string($voucher)) {
             $voucher = Vouchers::check($voucher);
         }
 
-        if ($product !== null && $voucher->limit_scheme->is(VoucherScheme::ITEM)) {
-            if ($product instanceof Model || is_string($product)) {
-                $product = [$product];
-            }
-            return $voucher->isAnyItem($product);
+        if ($items === null && $voucher->limit_scheme->is(VoucherScheme::ITEM)) {
+            throw new InvalidArgumentException("Please provide an item.");
         }
 
+        if ($items !== null && $voucher->limit_scheme->is(VoucherScheme::ITEM)) {
+            if ($items instanceof Model) {
+                $items = [$items];
+            }
+            $items = $this->filterItems($voucher, $items);
+            return $voucher->isAnyItem($items);
+        }
+
+        $this->checkIsRedemeed($voucher, $items);
+
         return $voucher->isAllowed($this);
+    }
+
+    /**
+     * @throws VoucherRedeemsExhausted
+     * @throws VoucherAlreadyRedeemed
+     */
+    protected function checkIsRedemeed(Voucher $voucher, array $items): bool
+    {
+        $is_redeemed = false;
+        if ($voucher->limit_scheme->is(VoucherScheme::ITEM)) {
+            $items = $this->filterItems($voucher, $items);
+            foreach ($items as $item) {
+                $is_redeemed = $voucher->isRedeemed($item);
+                if ($is_redeemed) {
+                    break;
+                }
+            }
+        } else {
+            $is_redeemed = $voucher->isRedeemed($this);
+        }
+
+        if ($is_redeemed && $voucher->isDisposable()) {
+            throw VoucherAlreadyRedeemed::create($voucher);
+        }
+        if ($is_redeemed) {
+            throw VoucherRedeemsExhausted::create($voucher);
+        }
+
+        return false;
+    }
+
+    /**
+     * Filter the items that are not in the voucher
+     * @param Voucher $voucher
+     * @param array $items
+     * @return array
+     */
+    protected function filterItems(Voucher $voucher, array $items): array
+    {
+        return array_filter(
+            $items,
+            static function (Model $item) use ($voucher) {
+                /** @var ItemVoucherable $voucherItem */
+                foreach ($voucher->items as $voucherItem) {
+                    if (get_class($item) === $voucherItem->item_type && $item->getKey() == $voucherItem->item_id) {
+                        return $item;
+                    }
+                }
+                return false;
+            }
+        );
     }
 
     /**

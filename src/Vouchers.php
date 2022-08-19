@@ -3,6 +3,7 @@
 namespace MOIREI\Vouchers;
 
 use MOIREI\Vouchers\Exceptions\VoucherExpired;
+use MOIREI\Vouchers\Exceptions\VoucherIsInactive;
 use MOIREI\Vouchers\Exceptions\VoucherIsInvalid;
 use Illuminate\Database\Eloquent\Model;
 
@@ -109,16 +110,20 @@ class Vouchers
      * Check if code is a valid voucher.
      *
      * @param string $code
-     * @throws VoucherIsInvalid
+     * @return \MOIREI\Vouchers\Models\Voucher
      * @throws VoucherExpired
-     * @return \MOIREI\Vouchers\Models\Voucher|null
+     * @throws VoucherIsInactive
+     * @throws VoucherIsInvalid
      */
-    public function check(string $code)
+    public function check(string $code): Models\Voucher
     {
         $model = static::model();
         $voucher = $model::whereCode($code)->first();
         if ($voucher === null) {
             throw VoucherIsInvalid::withCode($code);
+        }
+        if (!$voucher->active) {
+            throw VoucherIsInactive::withCode($code);
         }
         if ($voucher->expired) {
             throw VoucherExpired::create($voucher);

@@ -62,9 +62,17 @@ class Voucher extends Model
      * @var array<string>
      */
     protected $fillable = [
-        'code', 'active_date', 'expires_at',
-        'quantity', 'quantity_used', 'limit_scheme', 'value',
-        'can_redeem', 'cannot_redeem', 'allow_models', 'deny_models',
+        'code',
+        'active_date',
+        'expires_at',
+        'quantity',
+        'quantity_used',
+        'limit_scheme',
+        'value',
+        'can_redeem',
+        'cannot_redeem',
+        'allow_models',
+        'deny_models',
         'data',
     ];
 
@@ -111,7 +119,10 @@ class Voucher extends Model
      */
     public function __construct(array $attributes = [])
     {
-        parent::__construct(array_merge(['limit_scheme' => config('vouchers.default_limit_scheme', VoucherScheme::INSTANCE)], $attributes));
+        parent::__construct(
+            array_merge(['limit_scheme' => config('vouchers.default_limit_scheme', VoucherScheme::INSTANCE)],
+                $attributes)
+        );
         $this->table = config('vouchers.tables.vouchers', 'vouchers');
     }
 
@@ -190,8 +201,9 @@ class Voucher extends Model
      */
     public function scopeExpired($query, $age = null)
     {
-        if (!$age) $age = Carbon::now();
-        elseif (is_int($age)) {
+        if (!$age) {
+            $age = Carbon::now();
+        } elseif (is_int($age)) {
             $age = Carbon::now()->subDays($age);
         }
 
@@ -254,8 +266,8 @@ class Voucher extends Model
     public function getActiveAttribute()
     {
         return !$this->expired && (!$this->active_date ||
-            ($this->active_date && !$this->active_date->isFuture())
-        );
+                ($this->active_date && !$this->active_date->isFuture())
+            );
     }
 
     /**
@@ -478,7 +490,7 @@ class Voucher extends Model
     }
 
     /**
-     * Get the quantity used (based on limit scheme)
+     * Set the quantity used (based on limit scheme)
      *
      * @param int $quantity
      * @param Model|null $model redeemer or related item model
@@ -569,8 +581,9 @@ class Voucher extends Model
             $this->queuedItems = array_merge($this->queuedItems, $items);
         } else {
             $default_item_class = config('vouchers.models.products');
-            $items = array_map(fn ($item) => ($item instanceof Model) ? $item : $default_item_class::find($item), $items);
-            $existing_item_keys = $this->items()->get()->map(fn ($item) => Helpers::getModelKey($item->item))->toArray();
+            $items = array_map(fn($item) => ($item instanceof Model) ? $item : $default_item_class::find($item),
+                $items);
+            $existing_item_keys = $this->items()->get()->map(fn($item) => Helpers::getModelKey($item->item))->toArray();
             $changed = false;
 
             /** @var Model $item */
@@ -641,7 +654,8 @@ class Voucher extends Model
         if (!$this->exists) {
             $this->queuedItems = $products;
         } else {
-            $products = array_map(fn ($product) => ($product instanceof Model) ? $product->getKey() : $product, $products);
+            $products = array_map(fn($product) => ($product instanceof Model) ? $product->getKey() : $product,
+                $products);
             $this->products()->sync($products);
             $this->clearItemsCache();
         }
@@ -661,7 +675,8 @@ class Voucher extends Model
         if (!$this->exists) {
             $this->queuedItems = array_merge($this->queuedItems, $products);
         } else {
-            $products = array_map(fn ($product) => ($product instanceof Model) ? $product->getKey() : $product, $products);
+            $products = array_map(fn($product) => ($product instanceof Model) ? $product->getKey() : $product,
+                $products);
             $this->products()->syncWithoutDetaching($products);
             $this->clearItemsCache();
         }
@@ -678,7 +693,7 @@ class Voucher extends Model
     public function removeProducts($products): self
     {
         $products = is_array($products) ? $products : func_get_args();
-        $products = array_map(fn ($product) => ($product instanceof Model) ? $product->getKey() : $product, $products);
+        $products = array_map(fn($product) => ($product instanceof Model) ? $product->getKey() : $product, $products);
         $this->products()->detach($products);
         $this->clearItemsCache();
 
@@ -717,7 +732,7 @@ class Voucher extends Model
      * @param Carbon|null $date
      * @return self
      */
-    public function expire(Carbon|Null $date = null): self
+    public function expire(Carbon|null $date = null): self
     {
         $this->expires_at = is_null($date) ? Carbon::now() : $date;
 
@@ -844,8 +859,8 @@ class Voucher extends Model
     public function isExhausted(Model $model = null): bool
     {
         if (!$model && ($this->limit_scheme->is(VoucherScheme::ITEM) ||
-            $this->limit_scheme->is(VoucherScheme::REDEEMER)
-        )) {
+                $this->limit_scheme->is(VoucherScheme::REDEEMER)
+            )) {
             return false;
         }
 
@@ -933,6 +948,10 @@ class Voucher extends Model
     public function isAnyItem($items): bool
     {
         $items = is_array($items) ? $items : func_get_args();
+        if (count($items) === 0) {
+            return 0;
+        }
+
         $query = $this->products();
         $count = 0;
 
@@ -980,7 +999,7 @@ class Voucher extends Model
      * @param \Illuminate\Support\Carbon|int $age
      * @return void
      */
-    static public function pruneExpired(Carbon | int $age = 1)
+    static public function pruneExpired(Carbon|int $age = 1)
     {
         $query = static::expired($age)->orderBy('id', 'desc');
 

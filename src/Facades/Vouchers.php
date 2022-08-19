@@ -10,7 +10,7 @@ use MOIREI\Vouchers\Models\Voucher;
  * @method static Voucher create(Model|string|array $item = null, array $attributes = [])
  * @method static Voucher[] createMany(int $amount = 1, Model|string|array $item = null, array $attributes = [])
  * @method static Voucher[] createReuse(int $amount = 1, Model|string|array $item, array $attributes = [], int $reuse = 1)
- * @method static Voucher|null check(string $code)
+ * @method static Voucher check(string $code)
  * @method static string generateUniqueCode()
  */
 class Vouchers extends Facade
