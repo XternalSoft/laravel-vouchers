@@ -4,8 +4,8 @@ use Illuminate\Support\Facades\Schema;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Database\Migrations\Migration;
 
-class CreateVouchersTable extends Migration
-{
+return new class extends Migration {
+
     protected string $voucherTable;
     protected string $redeemerPivotTable;
     protected string $itemPivotTable;
@@ -37,6 +37,7 @@ class CreateVouchersTable extends Migration
         });
 
         Schema::create($this->redeemerPivotTable, function (Blueprint $table) {
+            $table->bigIncrements('id');
             $table->string('redeemer_type');
             $table->string('redeemer_id');
             $table->index(['redeemer_type', 'redeemer_id']);
@@ -48,6 +49,7 @@ class CreateVouchersTable extends Migration
         });
 
         Schema::create($this->itemPivotTable, function (Blueprint $table) {
+            $table->bigIncrements('id');
             $table->string('item_type');
             $table->string('item_id');
             $table->index(['item_type', 'item_id']);
@@ -67,4 +69,4 @@ class CreateVouchersTable extends Migration
         Schema::dropIfExists($this->redeemerPivotTable);
         Schema::dropIfExists($this->voucherTable);
     }
-}
+};

@@ -2,6 +2,8 @@
 
 namespace MOIREI\Vouchers;
 
+use Illuminate\Filesystem\Filesystem;
+use Illuminate\Support\Collection;
 use Illuminate\Support\ServiceProvider;
 
 class VouchersServiceProvider extends ServiceProvider
@@ -19,11 +21,11 @@ class VouchersServiceProvider extends ServiceProvider
             ], 'vouchers-config');
 
 
-            if (!class_exists('CreateVouchersTable')) {
-                $this->publishes([
-                    __DIR__ . '/../database/migrations/0000_00_00_000000_create_vouchers_table.php' => database_path('migrations/' . date('Y_m_d_His', time()) . '_create_vouchers_table.php'),
-                ], 'vouchers-migrations');
-            }
+            $this->publishes([
+                __DIR__ . '/../database/migrations/0000_00_00_000000_create_vouchers_table.php' => $this->getMigrationFileName(
+                    'create_vouchers_table.php'
+                ),
+            ], 'vouchers-migrations');
 
             $this->publishes([
                 __DIR__ . '/../translations' => resource_path('lang/vendor/vouchers'),
@@ -49,5 +51,24 @@ class VouchersServiceProvider extends ServiceProvider
             $generator->setSeparator(config('vouchers.codes.separator'));
             return new Vouchers($generator);
         });
+    }
+
+    /**
+     * Returns existing migration file if found, else uses the current timestamp.
+     *
+     * @return string
+     */
+    protected function getMigrationFileName($migrationFileName): string
+    {
+        $timestamp = date('Y_m_d_His');
+
+        $filesystem = $this->app->make(Filesystem::class);
+
+        return Collection::make($this->app->databasePath() . DIRECTORY_SEPARATOR . 'migrations' . DIRECTORY_SEPARATOR)
+            ->flatMap(function ($path) use ($filesystem, $migrationFileName) {
+                return $filesystem->glob($path . '*_' . $migrationFileName);
+            })
+            ->push($this->app->databasePath() . "/migrations/{$timestamp}_{$migrationFileName}")
+            ->first();
     }
 }
