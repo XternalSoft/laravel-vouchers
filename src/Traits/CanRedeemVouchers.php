@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Relations\MorphToMany;
 use Illuminate\Support\Collection;
 use InvalidArgumentException;
 use MOIREI\Vouchers\Events\VoucherRedeemed;
+use MOIREI\Vouchers\Events\VoucherRefunded;
 use MOIREI\Vouchers\Exceptions\CannotRedeemVoucher;
 use MOIREI\Vouchers\Exceptions\VoucherAlreadyRedeemed;
 use MOIREI\Vouchers\Exceptions\VoucherRedeemsExhausted;
@@ -39,7 +40,7 @@ trait CanRedeemVouchers
         }
 
         if ($voucher->limit_scheme->is(VoucherScheme::ITEM)) {
-            $items = $this->filterItems($voucher,$items);
+            $items = $this->filterItems($voucher, $items);
             foreach ($items as $item) {
                 $voucher->incrementModelUse($item);
             }
@@ -56,6 +57,23 @@ trait CanRedeemVouchers
         event(new VoucherRedeemed($this, $voucher));
 
         return $voucher;
+    }
+
+    public function refund(Voucher $voucher, array|null $items = null): bool
+    {
+        if ($voucher->limit_scheme->is(VoucherScheme::ITEM)) {
+            $items = $this->filterItems($voucher, $items);
+            foreach ($items as $item) {
+                $voucher->decrementModelUse($item);
+            }
+        } elseif ($voucher->limit_scheme->is(VoucherScheme::REDEEMER)) {
+            $voucher->decrementModelUse($this);
+        } else {
+            $voucher->decrementUse();
+        }
+
+        event(new VoucherRefunded($this, $voucher));
+        return false;
     }
 
     /**

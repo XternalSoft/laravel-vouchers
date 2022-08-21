@@ -441,6 +441,39 @@ class Voucher extends Model
     }
 
     /**
+     * Decrement the amount used
+     *
+     * @param int $count
+     * @param Model|null $model refunder or related item model
+     * @return self
+     */
+    public function decrementUse(int $count = 1, Model $model = null): self
+    {
+        $currentQuantity = $this->getQuantityUsed($model);
+        if ($currentQuantity > 0) {
+            $this->setQuantityUsed(
+                $currentQuantity - $count,
+                $model,
+            );
+            $this->save();
+        }
+
+        return $this;
+    }
+
+    /**
+     * Decrement the amount used by model
+     *
+     * @param Model $model refunder or related item model
+     * @param int $count
+     * @return self
+     */
+    public function decrementModelUse(Model $model, int $count = 1)
+    {
+        return $this->decrementUse($count, $model);
+    }
+
+    /**
      * Limit use by
      *
      * @param VoucherScheme|string $per
@@ -968,7 +1001,7 @@ class Voucher extends Model
             if ($count++ == 0) {
                 $query->where($where);
             } else {
-                $query->orWhere(function($query) use($where){
+                $query->orWhere(function ($query) use ($where) {
                     $query->where($where);
                 });
             }
